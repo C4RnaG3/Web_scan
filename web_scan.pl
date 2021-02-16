@@ -1,7 +1,5 @@
 #!/usr/bin/perl
 
-#DISCLAIMER: Do not use on targets you do not have permission with
-
 #Imported modules
 use strict;
 use warnings;
@@ -291,7 +289,6 @@ sub bot {
 #done
 sub save_to_log {
     my $log = shift;
-    my @lines = split(/\n/, $log);
     open(my $fh, '>>', SCAN_LOG) || die $!;
     print $fh $log;
     print $fh "\n";
