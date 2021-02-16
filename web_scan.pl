@@ -17,12 +17,14 @@ no warnings 'uninitialized';
 $| = 1;
 
 #Checking user input
-my (%options, $dbg);
+my (%options, $dbg, $sup);
 GetOptions (\%options, "domain:s", "save", "suppress");
 die "Usage: perl $0 [options]\n--domain=\"<tagerget domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
 
+#Slick Banner
 &banner;
-#Turns on output saving
+
+#Checks for additional parameters
 if(exists $options{save}){
     $dbg = 1;
     if(-e SCAN_LOG){
@@ -34,6 +36,11 @@ if(exists $options{save}){
         close($fh);
     }
 }
+
+if(exists $options{suppress}){
+    $sup = 1;
+}
+######
 
 #Processing the code
 print "-----\n[!] Gathering information.. please wait...\n-----\n";
@@ -47,39 +54,32 @@ my $robo = robot_txt($options{domain}, $b);
 my $frame = cms_fingerprint($options{domain}, $b);
 
 #Output
-print "$wi\n" if(!exists $options{suppress});
+if(!defined $sup){
+print "$wi\n";
+print "$em\n";
+print "$spf\n";
+print "$pages\n";
+print "$subs\n";
+print "$robo\n";
+print "$frame\n";
+}
+
+#Save outputs to the log; Could probably clean this up a bit
 if($dbg){
     save_to_log($wi);
-}
-print "$em\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($em);
-}
-print "$spf\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($spf);
-}
-print "$pages\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($pages);
-}
-print "$subs\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($subs);
-}
-print "$robo\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($robo);
-}
-print "$frame\n" if(!exists $options{suppress});
-if($dbg){
     save_to_log($frame);
 }
 
 ############
 #Core functions
+############
 
-#done
+#Done
 sub get_info {
     my ($d, $browser) = @_;
     my @dig = `dig +short $d`;
@@ -107,7 +107,7 @@ sub get_info {
     return($ip, $status, $server, $powered);
 }
 
-#done
+#Done
 sub get_nameserver {
     my $i = shift;
     my ($lookup, $netrange, $cidr, $netname, $orgname);
@@ -121,7 +121,7 @@ sub get_nameserver {
     return($netrange, $cidr, $netname, $orgname);
 }
 
-#done
+#Done
 sub website_information {
     my $domain = shift;
     my @info = get_info($domain, $b);
@@ -135,7 +135,7 @@ sub website_information {
     return $info;
 }
 
-#done
+#Done
 sub email_mine {
     my ($e, $bot) = @_;
     my (@emails, %mail, $email, @found);
@@ -161,7 +161,7 @@ sub email_mine {
     return $rese;
 }
 
-#done
+#Done
 sub spf_validate {
     my $s = shift;
     my $find = `dig $s txt`;
@@ -176,7 +176,7 @@ sub spf_validate {
     }
 }
 
-#done
+#Done
 sub basic_spider {
     my ($d, $b) = @_;
     my @basic = qw(contact about pricing blog admin adminstration wp-admin login feed about-us);
@@ -199,7 +199,7 @@ sub basic_spider {
     return($spider);
 }
 
-#done; Could be expanded on
+#Done; Could be expanded on
 sub sub_domain {
     my ($s, $b) = @_;
     my @subs = qw(blog www shop members secure app);
@@ -222,7 +222,7 @@ sub sub_domain {
     return $sd;
 }
 
-#done
+#Done
 sub robot_txt {
     my ($r, $b) = @_;
     my $robot = $b -> get("https://$r/robots.txt");
@@ -240,7 +240,7 @@ sub robot_txt {
     return $bot_file;
 }
 
-#done; Could be expanded on
+#Done; Could be expanded on
 sub cms_fingerprint {
     my ($g, $b) = @_;
     my $get = $b->get("https://$g");
@@ -271,8 +271,9 @@ sub vuln_test_sanitation {}
 
 #####
 #Utility functions
+#####
 
-#done
+#Done
 sub bot {
 	my $cookies = HTTP::Cookies->new;
 	my $bot = LWP::UserAgent -> new;
@@ -283,7 +284,7 @@ sub bot {
 	return $bot;
 }
 
-#done
+#Done
 sub save_to_log {
     my $log = shift;
     open(my $fh, '>>', SCAN_LOG) || die $!;
@@ -292,7 +293,7 @@ sub save_to_log {
     close $fh;   
 }
 
-#done
+#Done
 sub banner {
     my $version = "0.5";
     my $banner = << "EOB";
