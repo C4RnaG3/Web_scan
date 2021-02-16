@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+################################################################
+# Warning: Only use against targets that you have consent with #
+################################################################
+
 #Imported modules
 use strict;
 use warnings;
@@ -17,7 +21,7 @@ my (%options, $dbg);
 GetOptions (\%options, "domain:s", "save", "suppress");
 die "Usage: perl $0 [options]\n--domain=\"<tagerget domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
 
-
+&banner;
 #Turns on output saving
 if(exists $options{save}){
     $dbg = 1;
@@ -146,9 +150,7 @@ sub email_mine {
 			}
 		}
 	}
-
     my $rese = "===========[E-Mail addresses]===========\n";
-
     if(scalar @found == 0){
         $rese .= "{!} NO EMAILS FOUND\n";
     }else{
@@ -186,7 +188,6 @@ sub basic_spider {
             push @found, $page;
         }
     }
-
     my $spider = "===========[BASIC SPIDER RESULTS]===========\n";
     if(scalar @found == 0) {
         $spider .= "{!} NO PAGES FOUND\n";
@@ -195,7 +196,6 @@ sub basic_spider {
             $spider .= "{+} FOUND PAGES: $_\n";
         }
     }
-
     return($spider);
 }
 
@@ -211,7 +211,6 @@ sub sub_domain {
             push @found_subs, $url;
         }
     }
-
     my $sd = "===========[BASIC SUB-DOMAIN ENUMERATION]===========\n";
     if (scalar @found_subs == 0) {
         $sd .= "{!} NO SUB-DOMAINS FOUND\n";
@@ -220,7 +219,6 @@ sub sub_domain {
             $sd .= "{+} FOUND SUB-DOMAINS: $_\n";
         }
     }
-
     return $sd;
 }
 
@@ -263,13 +261,12 @@ sub cms_fingerprint {
         }
     }
     $cms = "Custom/Unknown";
-
     my $fw = "===========[FRAMEWORK IDENTIFICATION]===========\n";
     $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
-
     return($fw);
 }
 
+#Needs to be built
 sub vuln_test_sanitation {}
 
 #####
@@ -293,6 +290,19 @@ sub save_to_log {
     print $fh $log;
     print $fh "\n";
     close $fh;   
+}
+
+#done
+sub banner {
+    my $version = "0.5";
+    my $banner = << "EOB";
+    ########################################
+    #\tGeneral Purpose Website Auditing   #
+    #\tVersion: $version                       #
+    ########################################
+EOB
+
+    print "$banner\n";
 }
 
 sub report {}
