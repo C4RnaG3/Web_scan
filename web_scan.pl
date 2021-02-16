@@ -17,7 +17,7 @@ no warnings 'uninitialized';
 $| = 1;
 
 #Checking user input
-my (%options, $dbg, $sup);
+my (%options, $dbg, $sup, %rez);
 GetOptions (\%options, "domain:s", "save", "suppress");
 die "Usage: perl $0 [options]\n--domain=\"<tagerget domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
 
@@ -46,13 +46,21 @@ if(exists $options{suppress}){
 print "-----\n[!] Gathering information.. please wait...\n-----\n";
 my $b = &bot;
 my $wi = website_information($options{domain});
+$rez{info} = $wi;
 my $em = email_mine($options{domain}, $b);
+$rez{email} = $em;
 my $spf = spf_validate($options{domain});
+$rez{spf} = $spf;
 my $pages = basic_spider($options{domain}, $b);
+$rez{page} = $pages;
 my $subs = sub_domain($options{domain}, $b);
+$rez{subs} = $subs;
 my $robo = robot_txt($options{domain}, $b);
+$rez{robo} = $robo;
 my $frame = cms_fingerprint($options{domain}, $b);
-
+$rez{frame} = $frame;
+print "-----\n[!] Generating score.. please wait...\n-----\n";
+&score(%rez);
 #Output
 if(!defined $sup){
 print "$wi\n";
@@ -306,4 +314,4 @@ EOB
     print "$banner\n";
 }
 
-sub report {}
+sub score {}
