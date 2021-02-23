@@ -17,7 +17,7 @@ no warnings 'uninitialized';
 $| = 1;
 
 #Checking user input
-my (%options, $dbg, $sup, %rez);
+my (%options, $dbg, $sup);
 GetOptions (\%options, "domain:s", "save", "suppress");
 die "Usage: perl $0 [options]\n--domain=\"<target domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
 
@@ -99,39 +99,6 @@ if($dbg){
 ############
 #Core functions
 ############
-
-sub sanitation_check {
-    my ($s, $b) = @_;
-    my $test = "===========[Input Sanitation Check]===========\n";
-    my @html = qw(< > " ' /);
-    my %encoded = qw(
-        < %3C
-        > %3E
-        " %22
-        ' %27
-        / %2F
-    );
-    my (%matching, %nmatching);
-
-    while(my ($k, $v) = each %encoded){
-        for my $h (@html){
-            my $htest = $b -> get("http://$s/?s=$h"); #Used 'S' as the query parameter as it is common
-            if($htest -> is_success){
-                my $base = $htest -> base;
-                if($base =~ m/^(?:http|https):\/\/.*?\/\?\w+=(.*)/g){
-                    my $q = $1;
-                    if($v eq $q){
-                        $matching{$k}=$v;
-                    }
-                }
-            }
-        }
-    }
-    while (my ($nk, $nv) = each %matching){
-        $test .= "[+] $nk is being filtered to $nv, sanitation appears to work\n";
-    }
-    return $test;
-}
 
 #Done
 sub ip_skip_check {
@@ -243,7 +210,7 @@ sub spf_validate {
 #Done
 sub basic_spider {
     my ($d, $b) = @_;
-    my @basic = qw(contact about pricing blog admin adminstration wp-admin login feed about-us);
+    my @basic = qw(contact about pricing blog admin adminstration wp-admin login feed about-us search-results results);
     my @found;
     for (@basic) {
         my $page = "https://$d/$_";
@@ -295,7 +262,7 @@ sub robot_txt {
     if($robot -> is_success) {
         $rfile = $robot -> decoded_content;
     } else {
-        $rfile = "[!] NOT FOUND\n";
+        $rfile = "{!} NOT FOUND\n";
         $bot_file .= $rfile;
         return $bot_file;
     }
@@ -306,7 +273,7 @@ sub robot_txt {
     return $bot_file;
 }
 
-#Need to build this out a lot more... yay
+#Done
 sub cms_fingerprint {
     my ($g, $b) = @_;
     my $get = $b->get("http://$g");
@@ -314,32 +281,65 @@ sub cms_fingerprint {
     my @wp = qw(wp-content wordpress wp-includes);
     my @joom = qw(modules components);
     my $fw = "===========[FRAMEWORK IDENTIFICATION]===========\n";
-    #####Need to redo this whole block#####
     if($get->is_success) {
         my $content = $get->as_string;
-        for(@wp){
-            if ($_ = grep(/\Q$content\E/gis, @wp)){
-                $cms = "wordpress";
-                $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
-                return($fw);
+        my @page = split(/\n/, $content);
+        for my $p(@page){
+            for my $w (@wp){
+                if ($p =~ /$w/gis){
+                    $cms = "wordpress";
+                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                    return($fw);
+                }
             }
         }
-        for(@joom) {
-            if ($_ = grep(/\Q$content\E/gis, @joom)){
-                $cms = "joomla";
-                $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
-                return($fw);
+        for my $p(@page){
+            for my $j (@joom) {
+                if ($p =~ /$j/gis){
+                    $cms = "joomla";
+                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                    return($fw);
+                }
             }
         }
     }
-    ############################
     $cms = "Custom/Unknown";
     $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
     return($fw);
 }
-#####
-#Utility functions
-#####
+
+sub sanitation_check {
+    my ($s, $b) = @_;
+    my $test = "===========[Input Sanitation Check]===========\n";
+    my @html = qw(< > " ' /);
+    my %encoded = qw(
+        < %3C
+        > %3E
+        " %22
+        ' %27
+        / %2F
+    );
+    my (%matching, %nmatching);
+
+    while(my ($k, $v) = each %encoded){
+        for my $h (@html){
+            my $htest = $b -> get("http://$s/?s=$h"); #Used 'S' as the query parameter as it is common, will expand upon later
+            if($htest -> is_success){
+                my $base = $htest -> base;
+                if($base =~ m/^(?:http|https):\/\/.*?\/\?\w+=(.*)/g){
+                    my $q = $1;
+                    if($v eq $q){
+                        $matching{$k}=$v;
+                    }
+                }
+            }
+        }
+    }
+    while (my ($nk, $nv) = each %matching){
+        $test .= "[+] $nk is being filtered to $nv, sanitation appears to work\n";
+    }
+    return $test;
+}
 
 #Done
 sub bot {
@@ -373,3 +373,5 @@ EOB
 
     print "$banner\n";
 }
+
+
