@@ -19,7 +19,7 @@ $| = 1;
 #Checking user input
 my (%options, $dbg, $sup, %rez);
 GetOptions (\%options, "domain:s", "save", "suppress");
-die "Usage: perl $0 [options]\n--domain=\"<tagerget domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
+die "Usage: perl $0 [options]\n--domain=\"<target domain name>\"\t(REQUIRED)\n--save\tStores the output to a log file (OPTIONAL)\n--suppress\tDoes not display any output (OPTIONAL)\n" if((!keys %options) or (!exists $options{domain}));
 
 #Slick Banner
 &banner;
@@ -40,36 +40,48 @@ if(exists $options{save}){
 if(exists $options{suppress}){
     $sup = 1;
 }
-######
 
+my $site = $options{domain};
+my $skip = ip_skip_check($site);
+
+###############
+
+my ($b, $wi, $em, $spf, $pages, $subs, $robo, $frame, $filtered);
 #Processing the code
-print "-----\n[!] Gathering information.. please wait...\n-----\n";
-my $b = &bot;
-my $wi = website_information($options{domain});
-$rez{info} = $wi;
-my $em = email_mine($options{domain}, $b);
-$rez{email} = $em;
-my $spf = spf_validate($options{domain});
-$rez{spf} = $spf;
-my $pages = basic_spider($options{domain}, $b);
-$rez{page} = $pages;
-my $subs = sub_domain($options{domain}, $b);
-$rez{subs} = $subs;
-my $robo = robot_txt($options{domain}, $b);
-$rez{robo} = $robo;
-my $frame = cms_fingerprint($options{domain}, $b);
-$rez{frame} = $frame;
-print "-----\n[!] Generating score.. please wait...\n-----\n";
-&score(%rez);
+
+if($skip == 1){
+    print "-----\n[!] Gathering information..\n[!] Target domain is IP address.. skipping web searches...\n-----";
+    $b = &bot;
+    $pages = basic_spider($site, $b);
+    $subs = sub_domain($site, $b);
+    $robo = robot_txt($site, $b);
+    $frame = cms_fingerprint($site, $b);
+    $filtered = sanitation_check($site, $b);
+}
+
+if($skip == 0){
+    print "-----\n[!] Gathering information.. please wait...\n-----\n";
+    $b = &bot;
+    $wi = website_information($site);
+    $em = email_mine($site, $b);
+    $spf = spf_validate($site);
+    $pages = basic_spider($site, $b);
+    $subs = sub_domain($site, $b);
+    $robo = robot_txt($site, $b);
+    $frame = cms_fingerprint($site, $b);
+    $filtered = sanitation_check($site, $b);
+}
+
 #Output
 if(!defined $sup){
-print "$wi\n";
-print "$em\n";
-print "$spf\n";
-print "$pages\n";
-print "$subs\n";
-print "$robo\n";
-print "$frame\n";
+    print "$wi\n";
+    print "$em\n";
+    print "$spf\n";
+    print "$pages\n";
+    print "$subs\n";
+    print "$robo\n";
+    print "$frame\n";
+    print "$filtered\n";
 }
 
 #Save outputs to the log; Could probably clean this up a bit
@@ -81,11 +93,55 @@ if($dbg){
     save_to_log($subs);
     save_to_log($robo);
     save_to_log($frame);
+    save_to_log($filtered);
 }
 
 ############
 #Core functions
 ############
+
+sub sanitation_check {
+    my ($s, $b) = @_;
+    my $test = "===========[Input Sanitation Check]===========\n";
+    my @html = qw(< > " ' /);
+    my %encoded = qw(
+        < %3C
+        > %3E
+        " %22
+        ' %27
+        / %2F
+    );
+    my (%matching, %nmatching);
+
+    while(my ($k, $v) = each %encoded){
+        for my $h (@html){
+            my $htest = $b -> get("http://$s/?s=$h"); #Used 'S' as the query parameter as it is common
+            if($htest -> is_success){
+                my $base = $htest -> base;
+                if($base =~ m/^(?:http|https):\/\/.*?\/\?\w+=(.*)/g){
+                    my $q = $1;
+                    if($v eq $q){
+                        $matching{$k}=$v;
+                    }
+                }
+            }
+        }
+    }
+    while (my ($nk, $nv) = each %matching){
+        $test .= "[+] $nk is being filtered to $nv, sanitation appears to work\n";
+    }
+    return $test;
+}
+
+#Done
+sub ip_skip_check {
+    my $ip = shift;
+    if ($ip =~ /(?:\d{1,3}\.?)+/gis){
+        return 1;
+    } else {
+        return 0;
+    }
+}
 
 #Done
 sub get_info {
@@ -100,7 +156,7 @@ sub get_info {
     if ($res->is_success){
         $status = $res->status_line;
     }else{
-        die "{!} Unable to successfully reach target\n";
+        warn "{!} Unable to send HEAD request\n";
     }
     my @headers = split(/\n/, $res->as_string);
     for (@headers) {
@@ -139,7 +195,7 @@ sub website_information {
     {+} SITE IP/s: $info[0]
     {+} STATUS CODE: $info[1]
     {+} SERVER TECHNOLOGY: $info[2], $info[3]
-    {+} DNS INFO: \n\t{+} Netrange: $dns[0]\t{+} CIDR: $dns[1]\n\t{+} Netname: $dns[2]\n\t{+} Orgname: $dns[3]";
+    {+} DNS INFO: \n\t{+} Netrange: $dns[0]\n\t{+} CIDR: $dns[1]\n\t{+} Netname: $dns[2]\n\t{+} Orgname: $dns[3]";
     return $info;
 }
 
@@ -207,7 +263,7 @@ sub basic_spider {
     return($spider);
 }
 
-#Done; Could be expanded on
+#Done
 sub sub_domain {
     my ($s, $b) = @_;
     my @subs = qw(blog www shop members secure app);
@@ -235,48 +291,52 @@ sub robot_txt {
     my ($r, $b) = @_;
     my $robot = $b -> get("https://$r/robots.txt");
     my $rfile;
+    my $bot_file = "===========[ROBOTS]===========\n";
     if($robot -> is_success) {
         $rfile = $robot -> decoded_content;
     } else {
-        $rfile = "NOT FOUND\n";
-        return $robot;
+        $rfile = "[!] NOT FOUND\n";
+        $bot_file .= $rfile;
+        return $bot_file;
     }
-    my $bot_file = "===========[ROBOTS]===========\n";
+    
     if($rfile){
         $bot_file .= "{!} ROBOTS.TXT:\n$rfile\n";
     }
     return $bot_file;
 }
 
-#Done; Could be expanded on
+#Need to build this out a lot more... yay
 sub cms_fingerprint {
     my ($g, $b) = @_;
-    my $get = $b->get("https://$g");
+    my $get = $b->get("http://$g");
     my $cms;
-    my @wp = qw(wp-content wordpress);
+    my @wp = qw(wp-content wordpress wp-includes);
     my @joom = qw(modules components);
+    my $fw = "===========[FRAMEWORK IDENTIFICATION]===========\n";
+    #####Need to redo this whole block#####
     if($get->is_success) {
         my $content = $get->as_string;
         for(@wp){
-            if ($_ = grep(/\Q$content\E/, @wp)){
+            if ($_ = grep(/\Q$content\E/gis, @wp)){
                 $cms = "wordpress";
+                $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                return($fw);
             }
         }
         for(@joom) {
-            if ($_ = grep(/\Q$content\E/, @joom)){
+            if ($_ = grep(/\Q$content\E/gis, @joom)){
                 $cms = "joomla";
+                $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                return($fw);
             }
         }
     }
+    ############################
     $cms = "Custom/Unknown";
-    my $fw = "===========[FRAMEWORK IDENTIFICATION]===========\n";
     $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
     return($fw);
 }
-
-#Needs to be built
-sub vuln_test_sanitation {}
-
 #####
 #Utility functions
 #####
@@ -303,7 +363,7 @@ sub save_to_log {
 
 #Done
 sub banner {
-    my $version = "0.5";
+    my $version = "1.3";
     my $banner = << "EOB";
     ########################################
     #\tGeneral Purpose Website Auditing   #
@@ -313,5 +373,3 @@ EOB
 
     print "$banner\n";
 }
-
-sub score {}
