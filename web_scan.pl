@@ -323,14 +323,16 @@ sub sanitation_check {
 
     while(my ($k, $v) = each %encoded){
         for my $h (@html){
-            my $htest = $b -> get("http://$s/?s=$h"); #Used 'S' as the query parameter as it is common, will expand upon later
+            my $htest = $b -> get("http://$s/?s=$h");
             if($htest -> is_success){
                 my $base = $htest -> base;
                 if($base =~ m/^(?:http|https):\/\/.*?\/\?\w+=(.*)/g){
                     my $q = $1;
                     if($v eq $q){
                         $matching{$k}=$v;
-                    }
+                    } else{
+		    	$test .= "[!] $k is not being encoded, potentially dangerous\n";
+		    }
                 }
             }
         }
