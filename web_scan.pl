@@ -1,8 +1,31 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 
 ################################################################
 # Warning: Only use against targets that you have consent with #
 ################################################################
+
+#####
+#TODO: 
+#   Add dynamic parameter gathering to increase effectiveness of input validation tests
+#   Fix the output saving to include timestamps to the file name
+#   Increase list of terms for spidering and sub-domain enumeration
+#   Fix some typos and grammatical errors
+#   Fix encoding test be more accurate and minimize testing
+#   Make it so that the suppress option automatically enabled logging
+#   Add in code recomendations (ie. Recommend a useful robots.txt file)
+#   Expand list of terms for CMS identification and add new CMS'
+#   Expand upon SPF recommendations
+#####
+#FIXED/ADDED:
+#   This changelog since I never had it in before (will track changes from here on out)
+#   Added SQL error testing for MySQL to test for SQLi
+#   Added a ping check to determine if the target is live
+#   Cleaned up the code a bit
+#   IP testing added in addition to basic domain names
+#   Ability to use "offline" tests if IP address is passed
+#   Minor bug fixes
+#   Removed unused variables
+#####
 
 #Imported modules
 use strict;
@@ -24,7 +47,7 @@ die "Usage: perl $0 [options]\n--domain=\"<target domain name>\"\t(REQUIRED)\n--
 #Slick Banner
 &banner;
 
-#Checks for additional parameters
+#Checks if the saving option is enabled
 if(exists $options{save}){
     $dbg = 1;
     if(-e SCAN_LOG){
@@ -43,10 +66,11 @@ if(exists $options{suppress}){
 
 my $site = $options{domain};
 my $skip = ip_skip_check($site);
+connection_test($site);
 
 ###############
 
-my ($b, $wi, $em, $spf, $pages, $subs, $robo, $frame, $filtered);
+my ($b, $wi, $em, $spf, $pages, $subs, $robo, $frame, $filtered, $sql);
 #Processing the code
 
 if($skip == 1){
@@ -57,6 +81,7 @@ if($skip == 1){
     $robo = robot_txt($site, $b);
     $frame = cms_fingerprint($site, $b);
     $filtered = sanitation_check($site, $b);
+    $sql = sql_errors($site, $b);
 }
 
 if($skip == 0){
@@ -70,6 +95,7 @@ if($skip == 0){
     $robo = robot_txt($site, $b);
     $frame = cms_fingerprint($site, $b);
     $filtered = sanitation_check($site, $b);
+    $sql = sql_errors($site, $b);
 }
 
 #Output
@@ -82,6 +108,7 @@ if(!defined $sup){
     print "$robo\n";
     print "$frame\n";
     print "$filtered\n";
+    print "$sql\n";
 }
 
 #Save outputs to the log; Could probably clean this up a bit
@@ -94,11 +121,24 @@ if($dbg){
     save_to_log($robo);
     save_to_log($frame);
     save_to_log($filtered);
+    save_to_log($sql);
 }
 
 ############
 #Core functions
 ############
+
+#Done
+sub connection_test {
+    my $t = shift;
+    my $ping = `ping -c 1 $t`;
+    if($ping) {
+        print "{+} Connection to the website is active\n\n";
+        return
+    }else{
+        die "{!} Unable to connect to website.... exiting\n";
+    }
+}
 
 #Done
 sub ip_skip_check {
@@ -262,7 +302,7 @@ sub robot_txt {
     if($robot -> is_success) {
         $rfile = $robot -> decoded_content;
     } else {
-        $rfile = "{!} NOT FOUND\n";
+        $rfile = "{!} NOT FOUND\n{!} Malicious Bots may attack the website\n";
         $bot_file .= $rfile;
         return $bot_file;
     }
@@ -288,7 +328,7 @@ sub cms_fingerprint {
             for my $w (@wp){
                 if ($p =~ /$w/gis){
                     $cms = "wordpress";
-                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n{!} Recommend using 'WPScan' for further analysis\n";
                     return($fw);
                 }
             }
@@ -297,7 +337,7 @@ sub cms_fingerprint {
             for my $j (@joom) {
                 if ($p =~ /$j/gis){
                     $cms = "joomla";
-                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n";
+                    $fw .= "{!} DETECTED FRAMEWORK: $cms\n{!} Recommen using 'JoomScan' for further analysis\n";
                     return($fw);
                 }
             }
@@ -308,9 +348,10 @@ sub cms_fingerprint {
     return($fw);
 }
 
+#Done
 sub sanitation_check {
     my ($s, $b) = @_;
-    my $test = "===========[Input Sanitation Check]===========\n";
+    my $test = "===========[INPUT SANITATION CHECK]===========\n";
     my @html = qw(< > " ' /);
     my %encoded = qw(
         < %3C
@@ -319,27 +360,27 @@ sub sanitation_check {
         ' %27
         / %2F
     );
-    my (%matching, %nmatching);
+    my (%matching);
 
     while(my ($k, $v) = each %encoded){
         for my $h (@html){
             my $htest = $b -> get("http://$s/?s=$h");
             if($htest -> is_success){
                 my $base = $htest -> base;
-                if($base =~ m/^(?:http|https):\/\/.*?\/\?\w+=(.*)/g){
+                if($base =~ m/^https?:\/\/.*?\/\?\w+=(.*)/g){
                     my $q = $1;
                     if($v eq $q){
                         $matching{$k}=$v;
-                    } else{
-		    	$test .= "[!] $k is not being encoded, potentially dangerous\n";
-		    }
+                    }
                 }
             }
         }
     }
+    
     while (my ($nk, $nv) = each %matching){
         $test .= "[+] $nk is being filtered to $nv, sanitation appears to work\n";
     }
+    $test .= "{!} More aggressive testing potentially needed\n";
     return $test;
 }
 
@@ -364,8 +405,29 @@ sub save_to_log {
 }
 
 #Done
+sub sql_errors {
+    my ($s, $b) = @_;
+    my @sql_tests = ("/?q=1", "/?q=1'", "/?q=1\"", "/?q=[1]", "/?q[]=1", "/?q=1`", "/?q=1\\", "/?q=1/*'*/", "/?q=1/*!1111'*/", "/?q=1'||'asd'||'", "/?q=1' or '1'='1", "/?q=1 or 1=1", "/?q='or''='");
+
+    my $sql_rez = "===========[DATABASE SECURITY CHECK]===========\n";
+
+    for my $sql(@sql_tests){
+        my $page = "http://$s$sql";
+        my $c = $b -> get($page);
+        if($c -> is_success){
+            my $html = $c ->decoded_content;
+            if($html =~ /.*error.*SQL\s*syntax/gis){
+                $sql_rez .= "[+] SQL Injection found at $page\n";
+            }
+        }
+    }
+    $sql_rez .= "[+] SQL Injection not found\n";
+    return $sql_rez;
+}
+
+#Done
 sub banner {
-    my $version = "1.3";
+    my $version = "1.4";
     my $banner = << "EOB";
     ########################################
     #\tGeneral Purpose Website Auditing   #
