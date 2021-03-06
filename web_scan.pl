@@ -17,6 +17,13 @@
 #   Expand upon SPF recommendations
 #####
 #FIXED/ADDED:
+#   1.4 (QOL updates)
+#   Minor bug fixes
+#   Added 2 new spider terms
+#   Will now clear screen when running
+#   Added more comments for easier code understanding (more are needed)#   
+#####
+#   1.3
 #   This changelog since I never had it in before (will track changes from here on out)
 #   Added SQL error testing for MySQL to test for SQLi
 #   Added a ping check to determine if the target is live
@@ -38,6 +45,7 @@ use LWP::Protocol::https;
 use HTTP::Cookies;
 no warnings 'uninitialized';
 $| = 1;
+system("clear");
 
 #Checking user input
 my (%options, $dbg, $sup);
@@ -64,6 +72,7 @@ if(exists $options{suppress}){
     $sup = 1;
 }
 
+#Assigns variables and does initial site check
 my $site = $options{domain};
 my $skip = ip_skip_check($site);
 connection_test($site);
@@ -131,7 +140,7 @@ if($dbg){
 #Done
 sub connection_test {
     my $t = shift;
-    my $ping = `ping -c 1 $t`;
+    my $ping = `ping -c 1 $t`; #sends 1 ping packet to test if site is alive
     if($ping) {
         print "{+} Connection to the website is active\n\n";
         return
@@ -143,7 +152,7 @@ sub connection_test {
 #Done
 sub ip_skip_check {
     my $ip = shift;
-    if ($ip =~ /(?:\d{1,3}\.?)+/gis){
+    if ($ip =~ /(?:\d{1,3}\.?)+/gis){ #regex used for testing if passed domain is IP address
         return 1;
     } else {
         return 0;
@@ -153,19 +162,19 @@ sub ip_skip_check {
 #Done
 sub get_info {
     my ($d, $browser) = @_;
-    my @dig = `dig +short $d`;
+    my @dig = `dig +short $d`; #gets just the IP address from the 'dig' command
     my ($ip, $status, $server, $powered);
     for (@dig) {
         chomp($_);
         $ip .= " $_,";         
     }
-    my $res = $browser->head("https://$d");
+    my $res = $browser->head("https://$d"); #sends a HEAD request for data parsing
     if ($res->is_success){
         $status = $res->status_line;
     }else{
         warn "{!} Unable to send HEAD request\n";
     }
-    my @headers = split(/\n/, $res->as_string);
+    my @headers = split(/\n/, $res->as_string); #splite up the response by newlines
     for (@headers) {
         if ($_ =~ m/Server: (.*)/g){
             $server = $1;
@@ -173,6 +182,7 @@ sub get_info {
             $powered .= "$1, ";
         }
     }
+    #removes trailing ','
     $powered = substr($powered, 0, -2);
     $ip = substr($ip, 0, -1);
     return($ip, $status, $server, $powered);
@@ -182,8 +192,8 @@ sub get_info {
 sub get_nameserver {
     my $i = shift;
     my ($lookup, $netrange, $cidr, $netname, $orgname);
-    $lookup = `whois $i`;
-    if($lookup =~ m/netrange:\s*((?:\d{1,3}[\.\s]+)+\s*\-\s*(?:\d{1,3}[\.\s]+)+)\s*cidr:\s*((?:\d{1,3}[\.\s]+)+\d+\/\d+)\s*netname:\s*([\w\-]+)\s*\w+.{0,1050}?orgname:\s*([\w\s]+)(?=orgid)/gis){
+    $lookup = `whois $i`; #whois request
+    if($lookup =~ m/netrange:\s*((?:\d{1,3}[\.\s]+)+\s*\-\s*(?:\d{1,3}[\.\s]+)+)\s*cidr:\s*((?:\d{1,3}[\.\s]+)+\d+\/\d+)\s*netname:\s*([\w\-]+)\s*\w+.{0,1050}?orgname:\s*([\w\s]+)(?=orgid)/gis){ #regex for parsing whois response
         $netrange = $1;
         $cidr = $2;
         $netname = $3;
@@ -210,12 +220,12 @@ sub website_information {
 sub email_mine {
     my ($e, $bot) = @_;
     my (@emails, %mail, $email, @found);
-    my $url = 'https://www.google.com/search?num=100&start=0&h1=en&meta=&q=%40%22'.$e.'%22';
+    my $url = 'https://www.google.com/search?num=100&start=0&h1=en&meta=&q=%40%22'.$e.'%22'; #queries Google for email addresses to avoid unneeded requests to website
     my $res = $bot->get($url);
 	if($res -> is_success) {
-		@emails = $res->as_string =~ m/[a-z0-9_.-]+\@/ig;
+		@emails = $res->as_string =~ m/[a-z0-9_.-]+\@/ig; #saves potential email addresses to an array based on regex matching
 		foreach $email (@emails) {
-			if(not exists $mail{$email}) {
+			if(!exists $mail{$email}) {
 				push @found, $email.$e;
 				$mail{$email} = 1; 
 			}
@@ -235,8 +245,9 @@ sub email_mine {
 #Done
 sub spf_validate {
     my $s = shift;
+    #digs for TXT records, then regex match for SPF records 
     my $find = `dig $s txt`;
-    if ($find =~ m/(v=spf.*)/g){
+    if ($find =~ /(v=spf.*)/g){
         my $res = "===========[SPF RECORD]===========\n";
         if($1) {
             $res .= "{!} Found Record:\n$1\n";
@@ -250,7 +261,7 @@ sub spf_validate {
 #Done
 sub basic_spider {
     my ($d, $b) = @_;
-    my @basic = qw(contact about pricing blog admin adminstration wp-admin login feed about-us search-results results);
+    my @basic = qw(contact about pricing blog admin adminstration wp-admin login feed about-us search-results results login.php connect.php);
     my @found;
     for (@basic) {
         my $page = "https://$d/$_";
@@ -276,7 +287,7 @@ sub sub_domain {
     my @subs = qw(blog www shop members secure app);
     my @found_subs;
     for (@subs) {
-        my $url = "https://$_.$s";
+        my $url = "http://$_.$s";
         my $subdomain = $b -> get($url);
         if($subdomain -> is_success) {
             push @found_subs, $url;
@@ -296,7 +307,7 @@ sub sub_domain {
 #Done
 sub robot_txt {
     my ($r, $b) = @_;
-    my $robot = $b -> get("https://$r/robots.txt");
+    my $robot = $b -> get("http://$r/robots.txt");
     my $rfile;
     my $bot_file = "===========[ROBOTS]===========\n";
     if($robot -> is_success) {
