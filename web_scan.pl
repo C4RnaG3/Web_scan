@@ -15,6 +15,7 @@
 #   Add in code recomendations (ie. Recommend a useful robots.txt file)
 #   Expand list of terms for CMS identification and add new CMS'
 #   Expand upon SPF recommendations
+#   Update function
 #####
 #FIXED/ADDED:
 #   1.4 (QOL updates)
